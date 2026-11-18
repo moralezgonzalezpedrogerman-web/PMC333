@@ -88,7 +88,7 @@ jobs:
           cp build/Release/pmaker_editor.exe P-Maker-Windows/
           cp runtime/forge_runtime.exe P-Maker-Windows/
           cp android/app/src/main/assets/apk_sign_key.pk8 android/app/src/main/assets/apk_sign_cert.der P-Maker-Windows/
-          T=$(ls template/*.apk 2>/dev/null | head -1)
+          T=$(ls template/*.apk 2>/dev/null | head -1 || true)
           if [ -n "$T" ]; then cp "$T" P-Maker-Windows/forge_template.apk; fi
           echo "Abre pmaker_editor.exe. Los proyectos se guardan en Documentos\\P-Maker. Deja juntos todos los archivos de esta carpeta: forge_template.apk permite crear el APK instalable desde Exportar > Android." > P-Maker-Windows/LEEME.txt
       - uses: actions/upload-artifact@v4
