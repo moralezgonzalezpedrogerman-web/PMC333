@@ -18,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Descomprimir
+        run: |
+          unzip -oq forge.zip
+          if [ -d forge ]; then cp -a forge/. .; fi
       - name: Compilar y probar (nucleo, importadores, editor sin pantalla)
         run: |
           cmake -S tests -B build-tests -DCMAKE_BUILD_TYPE=Release
@@ -28,6 +32,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Descomprimir
+        shell: bash
+        run: |
+          unzip -oq forge.zip || 7z x -y forge.zip
+          if [ -d forge ]; then cp -a forge/. .; fi
       - name: Compilar runtime de Windows
         run: |
           cmake -S . -B build
@@ -37,6 +46,7 @@ jobs:
           name: forge_runtime
           path: build/Release/forge_runtime.exe
 
+  # Editor completo para Windows. Va aparte: si falla, el APK se genera igual.
   windows-editor:
     needs: [windows-runtime, android-apk]
     if: ${{ !cancelled() && needs.windows-runtime.result == 'success' }}
@@ -44,10 +54,16 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      - name: Descomprimir
+        shell: bash
+        run: |
+          unzip -oq forge.zip || 7z x -y forge.zip
+          if [ -d forge ]; then cp -a forge/. .; fi
       - uses: actions/download-artifact@v4
         with:
           name: forge_runtime
           path: runtime
+      # La plantilla del APK (la app de P-Maker) viaja con el editor para crear APKs instalables desde Windows.
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -61,6 +77,8 @@ jobs:
           if ($code -ne 0) {
             "## Errores del editor de Windows" | Out-File $env:GITHUB_STEP_SUMMARY -Append
             Select-String -Path editor_log.txt -Pattern "error|LNK" | Select-Object -First 25 | ForEach-Object { $_.Line } | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            Write-Host "=== ERRORES ==="
+            Select-String -Path editor_log.txt -Pattern "error|LNK" | Select-Object -First 25 | ForEach-Object { Write-Host $_.Line }
           }
           exit $code
       - name: Paquete del editor de Windows
@@ -72,7 +90,7 @@ jobs:
           cp android/app/src/main/assets/apk_sign_key.pk8 android/app/src/main/assets/apk_sign_cert.der P-Maker-Windows/
           T=$(ls template/*.apk 2>/dev/null | head -1)
           if [ -n "$T" ]; then cp "$T" P-Maker-Windows/forge_template.apk; fi
-          echo "Abre pmaker_editor.exe. Los proyectos se guardan en Documentos\\P-Maker." > P-Maker-Windows/LEEME.txt
+          echo "Abre pmaker_editor.exe. Los proyectos se guardan en Documentos\\P-Maker. Deja juntos todos los archivos de esta carpeta: forge_template.apk permite crear el APK instalable desde Exportar > Android." > P-Maker-Windows/LEEME.txt
       - uses: actions/upload-artifact@v4
         with:
           name: P-Maker-Windows
@@ -83,22 +101,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Descomprimir
+        run: |
+          unzip -oq forge.zip
+          if [ -d forge ]; then cp -a forge/. .; fi
+      # El runtime de Windows viaja dentro del APK para exportar a .exe sin compilador.
       - uses: actions/download-artifact@v4
         with:
           name: forge_runtime
           path: android/app/src/main/assets
       - name: Juego independiente (opcional)
         if: ${{ github.event.inputs.game_dir != '' || github.event.inputs.game_pack != '' }}
+        env:
+          GAME_DIR: ${{ github.event.inputs.game_dir }}
+          GAME_PACK: ${{ github.event.inputs.game_pack }}
         run: |
           mkdir -p android/app/src/main/res/drawable-nodpi
-          if [ -n "${{ github.event.inputs.game_dir }}" ]; then
-            D="${{ github.event.inputs.game_dir }}"
+          if [ -n "$GAME_DIR" ]; then
+            D="$GAME_DIR"
             cp "$D/game.pack" android/app/src/main/assets/game.pack
             if [ -f "$D/icon.png" ]; then cp "$D/icon.png" android/app/src/main/res/drawable-nodpi/app_icon.png; fi
+            if [ -f "$D/apk.properties" ]; then echo "APK_PROPS=$GITHUB_WORKSPACE/$D/apk.properties" >> "$GITHUB_ENV"; fi
           else
-            cp "${{ github.event.inputs.game_pack }}" android/app/src/main/assets/game.pack
+            cp "$GAME_PACK" android/app/src/main/assets/game.pack
           fi
           touch android/app/src/main/assets/standalone
+          # sin editor ni runtime de Windows: el APK solo lleva el juego
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -108,16 +136,16 @@ jobs:
           gradle-version: 8.7
       - name: Compilar APK
         run: |
-          cd android
           set +e
-          gradle assembleDebug --console=plain 2>&1 | tee apk_log.txt
+          gradle -p android assembleDebug --console=plain 2>&1 | tee apk_log.txt
           code=${PIPESTATUS[0]}
           if [ "$code" != "0" ]; then
+            echo "=== ERRORES ==="
             grep -nE "error:|error C|undefined reference|What went wrong|FAILED" -A3 apk_log.txt | head -60
+            { echo "## Errores del APK"; grep -nE "error:|undefined reference|What went wrong" -A3 apk_log.txt | head -60; } >> "$GITHUB_STEP_SUMMARY"
           fi
           exit $code
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ (github.event.inputs.game_dir != '' || github.event.inputs.game_pack != '') && 'game-apk' || 'forge-apk' }}
           path: android/app/build/outputs/apk/debug/*.apk
-          
