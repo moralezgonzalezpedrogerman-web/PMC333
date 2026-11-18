@@ -21,7 +21,7 @@ jobs:
         sudo apt-get install -y cmake build-essential
 
     - name: Configure CMake
-      run: cmake -B build -S forge
+      run: cmake -B build -S .
 
     - name: Build project
       run: cmake --build build --config Release
@@ -47,7 +47,7 @@ jobs:
       uses: android-actions/setup-android@v3
 
     - name: Build Android App (Gradle)
-      working-directory: ./forge/android
+      working-directory: ./android
       run: |
         chmod +x gradlew
         ./gradlew assembleDebug
@@ -56,5 +56,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: app-debug
-        path: forge/android/app/build/outputs/apk/debug/app-debug.apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
         
