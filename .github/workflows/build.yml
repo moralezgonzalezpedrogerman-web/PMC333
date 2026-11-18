@@ -20,7 +20,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compilar y probar (nucleo, importadores, editor sin pantalla)
         run: |
-          cd forge
           cmake -S tests -B build-tests -DCMAKE_BUILD_TYPE=Release
           cmake --build build-tests -j4
           ctest --test-dir build-tests --output-on-failure
@@ -31,13 +30,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compilar runtime de Windows
         run: |
-          cd forge
           cmake -S . -B build
           cmake --build build --config Release --target forge_runtime -- /nologo /verbosity:minimal
       - uses: actions/upload-artifact@v4
         with:
           name: forge_runtime
-          path: forge/build/Release/forge_runtime.exe
+          path: build/Release/forge_runtime.exe
 
   windows-editor:
     needs: [windows-runtime, android-apk]
@@ -49,15 +47,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: forge_runtime
-          path: forge/runtime
+          path: runtime
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: forge-apk
-          path: forge/template
+          path: template
       - name: Compilar editor de Windows
         run: |
-          cd forge
           cmake -S . -B build
           cmake --build build --config Release --target pmaker_editor -- /nologo /verbosity:minimal 2>&1 | Tee-Object -FilePath editor_log.txt
           $code = $LASTEXITCODE
@@ -69,7 +66,6 @@ jobs:
       - name: Paquete del editor de Windows
         shell: bash
         run: |
-          cd forge
           mkdir -p P-Maker-Windows
           cp build/Release/pmaker_editor.exe P-Maker-Windows/
           cp runtime/forge_runtime.exe P-Maker-Windows/
@@ -80,7 +76,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: P-Maker-Windows
-          path: forge/P-Maker-Windows
+          path: P-Maker-Windows
 
   android-apk:
     needs: [tests, windows-runtime]
@@ -90,11 +86,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: forge_runtime
-          path: forge/android/app/src/main/assets
+          path: android/app/src/main/assets
       - name: Juego independiente (opcional)
         if: ${{ github.event.inputs.game_dir != '' || github.event.inputs.game_pack != '' }}
         run: |
-          cd forge
           mkdir -p android/app/src/main/res/drawable-nodpi
           if [ -n "${{ github.event.inputs.game_dir }}" ]; then
             D="${{ github.event.inputs.game_dir }}"
@@ -113,7 +108,7 @@ jobs:
           gradle-version: 8.7
       - name: Compilar APK
         run: |
-          cd forge/android
+          cd android
           set +e
           gradle assembleDebug --console=plain 2>&1 | tee apk_log.txt
           code=${PIPESTATUS[0]}
@@ -124,5 +119,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ (github.event.inputs.game_dir != '' || github.event.inputs.game_pack != '') && 'game-apk' || 'forge-apk' }}
-          path: forge/android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           
