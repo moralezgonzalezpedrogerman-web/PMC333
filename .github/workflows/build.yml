@@ -46,6 +46,7 @@ jobs:
           name: forge_runtime
           path: build/Release/forge_runtime.exe
 
+  # Editor completo para Windows. Va aparte: si falla, el APK se genera igual.
   windows-editor:
     needs: [windows-runtime, android-apk]
     if: ${{ !cancelled() && needs.windows-runtime.result == 'success' }}
@@ -62,6 +63,7 @@ jobs:
         with:
           name: forge_runtime
           path: runtime
+      # La plantilla del APK (la app de P-Maker) viaja con el editor para crear APKs instalables desde Windows.
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -103,6 +105,7 @@ jobs:
         run: |
           unzip -oq forge.zip
           if [ -d forge ]; then cp -a forge/. .; fi
+      # El runtime de Windows viaja dentro del APK para exportar a .exe sin compilador.
       - uses: actions/download-artifact@v4
         with:
           name: forge_runtime
@@ -123,6 +126,7 @@ jobs:
             cp "$GAME_PACK" android/app/src/main/assets/game.pack
           fi
           touch android/app/src/main/assets/standalone
+          # sin editor ni runtime de Windows: el APK solo lleva el juego
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -130,10 +134,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+          # La cache de Gradle puede quedar corrupta (falta un .jar y falla en pocos segundos): se desactiva
           cache-disabled: true
       - name: Compilar APK
         run: |
           set +e
+          # Hasta 3 intentos: a veces Maven/Google falla al bajar un .jar (p. ej. kotlin-reflect)
           for n in 1 2 3; do
             echo "=== Intento $n de 3 ==="
             gradle -p android assembleDebug --console=plain --refresh-dependencies 2>&1 | tee apk_log.txt
